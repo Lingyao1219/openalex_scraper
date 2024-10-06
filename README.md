@@ -28,7 +28,7 @@ To run the script, you will need a search conditions file in .txt format that sp
 ```bash
 start_year,2020
 end_year,2022
-search_terms,climate change
+search_terms,"climate change"
 ```
 
 You can run the script by providing the path to the search conditions file using the -f option. Optionally, specify the output folder where the results should be saved with -o.
