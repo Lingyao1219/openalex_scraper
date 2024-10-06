@@ -19,6 +19,7 @@ You can install the dependencies using the following command:
 
 ```bash
 pip install requests pandas argparse
+```
 
 ## Running the script
 
@@ -28,8 +29,10 @@ To run the script, you will need a search conditions file in .txt format that sp
 start_year,2020
 end_year,2022
 search_terms,climate change
+```
 
 You can run the script by providing the path to the search conditions file using the -f option. Optionally, specify the output folder where the results should be saved with -o.
 
 ```bash
 python openalex_scrape.py -f search_conditions.txt -o results
+```
