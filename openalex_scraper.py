@@ -214,8 +214,6 @@ def extract_paper_info(paper):
         'metrics': safe_get(paper, 'counts_by_year') or {},
         'host_venue_issn': safe_get(paper, 'primary_location', 'source', 'issn'),
         'publisher': safe_get(paper, 'primary_location', 'source', 'publisher'),
-        'citing_papers_count': len(safe_get(paper, 'referenced_by') or []),
-        'citing_papers': '; '.join([citing['id'] for citing in safe_get(paper, 'referenced_by') or []]),
         'relevance_score': safe_get(paper, 'relevance_score'),
         'language': safe_get(paper, 'language'),
         'host_organization_name': safe_get(paper, 'primary_location', 'source', 'host_organization_name'),
