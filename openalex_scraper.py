@@ -1,12 +1,13 @@
 import os
 import json
 import time
+import random
 import requests
 import pandas as pd
 import argparse
 
 
-def fetch_papers(query, start_year=None, end_year=None, save_folder=None):
+def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percentage=1):
     """
     Fetch papers from the OpenAlex API based on the given query and date range.
     
@@ -15,12 +16,14 @@ def fetch_papers(query, start_year=None, end_year=None, save_folder=None):
     start_year (str): The start year for the publication date range (optional).
     end_year (str): The end year for the publication date range (optional).
     save_folder (str): The folder path to save intermediate CSV files (optional).
+    percentage (float): Percentage of results to save in each batch (default: 10%).
     
     Returns:
-    list: A list of dictionaries containing paper data.
+    list: A list of dictionaries containing the saved paper data.
     """
     base_url = "https://api.openalex.org/works"
     all_results = []
+    saved_results = []
     per_page = 200  # Maximum allowed by the API
     params = {
         "filter": f"title_and_abstract.search:{query}",
@@ -50,36 +53,39 @@ def fetch_papers(query, start_year=None, end_year=None, save_folder=None):
             print("No more results to fetch.")
             break
 
-        #all_results.extend(results)
+        all_results.extend(results)
         batch_results.extend(results)
         max_results = data['meta']['count']
         
         print(f"Total results fetched so far: {len(all_results)}")
+        print(f"Total results saved so far: {len(saved_results)}")
         print(f"Results in this batch: {len(results)}")
         print(f"Total count according to API: {max_results}")
         
-        # if len(all_results) % 1000 == 0 or len(all_results) >= max_results:
-        #     save_results(all_results, save_folder, file_counter)
-        #     file_counter += 1
-
-        if len(batch_results) >= 1000 or len(all_results) + len(batch_results) >= max_results:
-            all_results.extend(batch_results[:1000])  # Only take up to 1000 results
-            save_results(batch_results[:1000], save_folder, file_counter)
+        if len(batch_results) >= 10000:
+            results_to_save = random.sample(batch_results, int(len(batch_results) * percentage / 100))
+            saved_results.extend(results_to_save)
+            save_results(results_to_save, save_folder, file_counter)
+            print(f"Saved {percentage}% of {len(batch_results)} results")
             file_counter += 1
-            batch_results = batch_results[1000:]  # Keep any excess for the next batch
-            print(f"Saved batch of 1000 results")
-
+            batch_results = []
 
         if len(all_results) >= max_results:
-            all_results = all_results[:max_results]  # Trim to exact number
             print(f"Reached max_results ({max_results}). Stopping.")
             break
         
         cursor = data['meta'].get('next_cursor')
-        time.sleep(0.1)
+        time.sleep(0.05)
 
-    print(f"Retrieved {len(all_results)} results")
-    return all_results
+    # Save any remaining results
+    if batch_results:
+        results_to_save = random.sample(batch_results, int(len(batch_results) * percentage / 100))
+        saved_results.extend(results_to_save)
+        save_results(results_to_save, save_folder, file_counter)
+        print(f"Saved final batch of approximately {percentage}% of {len(batch_results)} results")
+
+    print(f"Saved {len(saved_results)} results in total")
+    return saved_results
 
 
 def save_results(results, save_folder, file_counter):
@@ -286,6 +292,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch and process academic papers based on search conditions.")
     parser.add_argument("-f", "--file", required=True, help="Path to the search conditions file")
     parser.add_argument("-o", "--output", default=None, help="Output folder path (default: same name as input file)")
+    parser.add_argument("-p", "--percentage", type=float, default=1.0, help="Percentage of results to save in each batch (default: 100, minimal:0.01)")
     args = parser.parse_args()
 
     start_year, end_year, query = process_search_file(args.file)
@@ -294,7 +301,7 @@ def main():
     else:
         save_folder = os.path.splitext(args.file)[0]
 
-    papers = fetch_papers(query, start_year, end_year, save_folder)
+    papers = fetch_papers(query, start_year, end_year, save_folder, args.percentage)
     df = create_dataframe(papers)
     save_dataset(df, save_folder)
 
