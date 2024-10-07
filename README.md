@@ -31,8 +31,8 @@ end_year,2022
 search_terms,"climate change"
 ```
 
-You can run the script by providing the path to the search conditions file using the -f option. Optionally, specify the output folder where the results should be saved with -o.
+You can run the script by providing the path to the search conditions file using the -f option. Optionally, specify the output folder where the results should be saved with -o. -p allows you to input the percentage of the downloaded papers given that some searches can return a large number of papers. The default percentage is 10, and the minimal percentage is 0.01. 
 
 ```bash
-python openalex_scrape.py -f search_conditions.txt -o results
+python openalex_scrape.py -f search_conditions.txt -o results -p 10
 ```
