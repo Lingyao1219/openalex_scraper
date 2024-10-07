@@ -7,7 +7,7 @@ import pandas as pd
 import argparse
 
 
-def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percentage=1):
+def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percentage=100):
     """
     Fetch papers from the OpenAlex API based on the given query and date range.
     
@@ -292,7 +292,7 @@ def main():
     parser = argparse.ArgumentParser(description="Fetch and process academic papers based on search conditions.")
     parser.add_argument("-f", "--file", required=True, help="Path to the search conditions file")
     parser.add_argument("-o", "--output", default=None, help="Output folder path (default: same name as input file)")
-    parser.add_argument("-p", "--percentage", type=float, default=1.0, help="Percentage of results to save in each batch (default: 100, minimal:0.01)")
+    parser.add_argument("-p", "--percentage", type=float, default=100, help="Percentage of results to save in each batch (default: 100, minimal:0.01)")
     args = parser.parse_args()
 
     start_year, end_year, query = process_search_file(args.file)
