@@ -23,7 +23,7 @@ pip install requests pandas argparse
 
 ## Running the script
 
-To run the script, you will need a search conditions file in .txt format that specifies the search terms and date range. Here's the format of the search conditions file:
+To run the script, you will need a search conditions file in .txt format that specifies the search terms and date range. Basically, this scraper only applies the search terms to the title and abstract given that applying them to the full text can bring a significant amount of noise data. Here's the format of the search conditions file:
 
 ```bash
 start_year,2020
