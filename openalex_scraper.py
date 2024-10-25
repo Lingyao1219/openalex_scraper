@@ -5,9 +5,128 @@ import random
 import requests
 import pandas as pd
 import argparse
+from enum import Enum
+
+class FetchMode(Enum):
+    ALL = "all"
+    RANDOM = "random"
+
+    @classmethod
+    def from_string(cls, mode_str):
+        try:
+            return cls(mode_str.lower())
+        except ValueError:
+            raise ValueError(f"Invalid mode: {mode_str}. Must be either 'all' or 'random'")
 
 
-def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percentage=100):
+def fetch_papers_with_mode(mode: FetchMode, query, max_papers=None, start_year=None, 
+                         end_year=None, save_folder=None, percentage=1):
+    """
+    Fetch papers based on the specified mode.
+    
+    Args:
+    mode (FetchMode): The mode to fetch papers (ALL or RANDOM)
+    query (str): The search query for paper titles and abstracts
+    max_papers (int): Maximum number of papers to fetch (required for RANDOM mode)
+    start_year (str): Start year for the publication date range
+    end_year (str): End year for the publication date range
+    save_folder (str): Folder path to save intermediate CSV files
+    percentage (float): Percentage of results to save in each batch (for ALL mode)
+    
+    Returns:
+    list: List of dictionaries containing paper data
+    """
+    if mode == FetchMode.RANDOM:
+        if not max_papers:
+            raise ValueError("max_papers must be specified when using RANDOM mode")
+        return fetch_random_papers(query, max_papers, start_year, end_year, save_folder)
+    else:
+        return fetch_papers(query, start_year, end_year, save_folder, percentage)
+
+
+def fetch_random_papers(query, max_papers, start_year=None, end_year=None, save_folder=None):
+    """
+    Fetch a random sample of papers from the OpenAlex API based on the given query and date range.
+    
+    Args:
+    query (str): The search query for paper titles and abstracts.
+    max_papers (int): The maximum number of papers to fetch.
+    start_year (str): The start year for the publication date range (optional).
+    end_year (str): The end year for the publication date range (optional).
+    save_folder (str): The folder path to save intermediate CSV files (optional).
+    
+    Returns:
+    list: A list of dictionaries containing the saved paper data.
+    """
+    base_url = "https://api.openalex.org/works"
+    all_results = []
+    per_page = 200  # Maximum allowed by the API
+    file_counter = 1
+    
+    params = {
+        "filter": f"title_and_abstract.search:{query}",
+        "per-page": per_page,
+        "sample": per_page
+    }
+
+    if start_year and end_year:
+        params["filter"] += f",publication_year:{start_year}-{end_year}"
+
+    batch_results = []
+    used_seeds = set()
+
+    while len(all_results) < max_papers:
+        seed = random.randint(0, 99999)
+        if seed in used_seeds:
+            continue
+        
+        used_seeds.add(seed)
+        params["seed"] = seed
+        print(f"Fetching {per_page} random samples with seed {seed}...")
+        
+        try:
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            results = data.get('results', [])
+            
+            if not results:
+                print("No more results to fetch.")
+                break
+
+            all_results.extend(results)
+            batch_results.extend(results)
+            print(f"Total results fetched so far: {len(all_results)}")
+
+            if len(all_results) >= max_papers:
+                all_results = all_results[:max_papers]
+                print(f"Reached the specified max_papers limit ({max_papers}). Stopping.")
+                break
+
+            if len(batch_results) >= 10000:
+                save_results(batch_results, save_folder, file_counter)
+                file_counter += 1
+                batch_results = []
+
+            remaining = max_papers - len(all_results)
+            params["sample"] = min(per_page, remaining)
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error during API request: {e}")
+            time.sleep(1)  # Wait longer on error
+            continue
+            
+        time.sleep(0.05)
+
+    if batch_results:
+        save_results(batch_results, save_folder, file_counter)
+    
+    print(f"Successfully saved {len(all_results)} results in total")
+    return all_results
+
+
+def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percentage=1):
     """
     Fetch papers from the OpenAlex API based on the given query and date range.
     
@@ -16,7 +135,7 @@ def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percen
     start_year (str): The start year for the publication date range (optional).
     end_year (str): The end year for the publication date range (optional).
     save_folder (str): The folder path to save intermediate CSV files (optional).
-    percentage (float): Percentage of results to save in each batch (default: 10%).
+    percentage (float): Percentage of results to save in each batch.
     
     Returns:
     list: A list of dictionaries containing the saved paper data.
@@ -29,6 +148,7 @@ def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percen
         "filter": f"title_and_abstract.search:{query}",
         "per-page": per_page,
     }
+    
     if start_year and end_year:
         params["filter"] += f",publication_year:{start_year}-{end_year}"
 
@@ -39,52 +159,54 @@ def fetch_papers(query, start_year=None, end_year=None, save_folder=None, percen
     while cursor:
         params["cursor"] = cursor
         print(f"Fetching results with cursor: {cursor}")
-        response = requests.get(base_url, params=params)
         
-        if response.status_code != 200:
-            print(f"Error: {response.status_code}")
-            print(f"Response content: {response.text}")
-            break
+        try:
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            results = data.get('results', [])
+            
+            if not results:
+                print("No more results to fetch.")
+                break
 
-        data = response.json()
-        results = data.get('results', [])
-        
-        if not results:
-            print("No more results to fetch.")
-            break
+            all_results.extend(results)
+            batch_results.extend(results)
+            max_results = data['meta']['count']
+            
+            print(f"Total results fetched so far: {len(all_results)}")
+            print(f"Total results saved so far: {len(saved_results)}")
+            print(f"Results in this batch: {len(results)}")
+            print(f"Total count according to API: {max_results}")
+            
+            if len(batch_results) >= 10000:
+                results_to_save = random.sample(batch_results, 
+                                             int(len(batch_results) * percentage))
+                saved_results.extend(results_to_save)
+                save_results(results_to_save, save_folder, file_counter)
+                print(f"Saved {percentage * 100}% of {len(batch_results)} results")
+                file_counter += 1
+                batch_results = []
 
-        all_results.extend(results)
-        batch_results.extend(results)
-        max_results = data['meta']['count']
-        
-        print(f"Total results fetched so far: {len(all_results)}")
-        print(f"Total results saved so far: {len(saved_results)}")
-        print(f"Results in this batch: {len(results)}")
-        print(f"Total count according to API: {max_results}")
-        
-        if len(batch_results) >= 10000:
-            results_to_save = random.sample(batch_results, int(len(batch_results) * percentage / 100))
-            saved_results.extend(results_to_save)
-            save_results(results_to_save, save_folder, file_counter)
-            print(f"Saved {percentage}% of {len(batch_results)} results")
-            file_counter += 1
-            batch_results = []
-
-        if len(all_results) >= max_results:
-            print(f"Reached max_results ({max_results}). Stopping.")
-            break
-        
-        cursor = data['meta'].get('next_cursor')
+            cursor = data['meta'].get('next_cursor')
+            
+        except requests.exceptions.RequestException as e:
+            print(f"Error during API request: {e}")
+            time.sleep(1)  # Wait longer on error
+            continue
+            
         time.sleep(0.05)
 
     # Save any remaining results
     if batch_results:
-        results_to_save = random.sample(batch_results, int(len(batch_results) * percentage / 100))
+        results_to_save = random.sample(batch_results, 
+                                     int(len(batch_results) * percentage))
         saved_results.extend(results_to_save)
         save_results(results_to_save, save_folder, file_counter)
-        print(f"Saved final batch of approximately {percentage}% of {len(batch_results)} results")
+        print(f"Saved final batch of approximately {percentage * 100}% of {len(batch_results)} results")
 
-    print(f"Saved {len(saved_results)} results in total")
+    print(f"Successfully saved {len(saved_results)} results in total")
     return saved_results
 
 
@@ -137,7 +259,8 @@ def extract_abstract(abstract_inverted_index):
     if not abstract_inverted_index:
         return ""
 
-    max_position = max(pos for positions in abstract_inverted_index.values() for pos in positions)
+    max_position = max(pos for positions in abstract_inverted_index.values() 
+                      for pos in positions)
     abstract = [""] * (max_position + 1)
 
     for word, positions in abstract_inverted_index.items():
@@ -192,6 +315,7 @@ def extract_paper_info(paper):
         'abstract': abstract,
         'publication_year': safe_get(paper, 'publication_year'),
         'publication_date': safe_get(paper, 'publication_date'),
+        'created_date': safe_get(paper, 'created_date'),
         'type': safe_get(paper, 'type'),
         'cited_by_count': safe_get(paper, 'cited_by_count'),
         'is_retracted': safe_get(paper, 'is_retracted'),
@@ -286,23 +410,62 @@ def main():
     """
     Main function to run the paper fetching and processing script.
     """
-    # Set up the argument parser
     parser = argparse.ArgumentParser(description="Fetch and process academic papers based on search conditions.")
-    parser.add_argument("-f", "--file", required=True, help="Path to the search conditions file")
-    parser.add_argument("-o", "--output", default=None, help="Output folder path (default: same name as input file)")
-    parser.add_argument("-p", "--percentage", type=float, default=100, help="Percentage of results to save in each batch (default: 100, minimal:0.01)")
+    parser.add_argument("-m", "--mode", required=True, choices=['all', 'random'],
+                       help="Mode to fetch papers: 'all' for complete dataset, 'random' for random sampling")
+    parser.add_argument("-f", "--file", required=True,
+                       help="Path to the search conditions file")
+    parser.add_argument("-o", "--output", default=None,
+                       help="Output folder path (default: same name as input file)")
+    parser.add_argument("-p", "--percentage", type=float, default=1.0,
+                       help="Percentage of results to save in each batch (default: 100, minimal:0.01)")
+    parser.add_argument("-n", "--max_papers", type=int, default=None,
+                       help="Maximum number of papers to fetch (required for random mode)")
+
     args = parser.parse_args()
 
-    start_year, end_year, query = process_search_file(args.file)
-    if args.output:
-        save_folder = args.output
-    else:
-        save_folder = os.path.splitext(args.file)[0]
+    if args.mode == 'random' and args.max_papers is None:
+        parser.error("--max_papers is required when using random mode")
+    
+    if args.percentage < 0.01 or args.percentage > 100:
+        parser.error("Percentage must be between 0.01 and 100")
 
-    papers = fetch_papers(query, start_year, end_year, save_folder, args.percentage)
-    df = create_dataframe(papers)
-    save_dataset(df, save_folder)
+    # Process input file and set up output directory
+    start_year, end_year, query = process_search_file(args.file)
+    save_folder = args.output if args.output else os.path.splitext(args.file)[0]
+
+    try:
+        # Fetch papers based on mode
+        fetch_mode = FetchMode.from_string(args.mode)
+        
+        papers = fetch_papers_with_mode(
+            mode=fetch_mode,
+            query=query,
+            max_papers=args.max_papers,
+            start_year=start_year,
+            end_year=end_year,
+            save_folder=save_folder,
+            percentage=args.percentage / 100
+        )
+
+        # Process and save results
+        # if papers:
+        #     df = create_dataframe(papers)
+        #     save_dataset(df, save_folder)
+        #     print(f"Successfully processed and saved {len(papers)} papers.")
+        # else:
+        #     print("No papers were fetched. Please check your search criteria.")
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        raise
 
 
 if __name__ == "__main__":
     main()
+
+# To fetch all papers with 10% sampling
+# python script.py -m all -f search_conditions.txt -p 10
+
+# To fetch random papers with a specific limit
+# python script.py -m random -f search_conditions.txt -n 1000
