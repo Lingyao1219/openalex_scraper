@@ -33,6 +33,12 @@ search_terms,"climate change"
 
 You can run the script by providing the path to the search conditions file using the -f option. Optionally, you can specify the output folder where the results should be saved with -o. The -p option allows you to input the percentage of the downloaded papers given that some searches can return a large number of papers. The default percentage is 100, and the minimal percentage is 0.01. 
 
+
+To fetch all papers with 10% sampling
 ```bash
-python openalex_scrape.py -f search_conditions.txt -o results -p 10
+python openalex_scraper.py -m all -f search_conditions.txt -o results -p 10
+```
+To fetch random papers with a specific limit (e.g., 1000)
+```bash
+python openalex_scraper.py -m random -f search_conditions.txt -n 1000
 ```
