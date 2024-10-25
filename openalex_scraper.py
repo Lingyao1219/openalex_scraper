@@ -463,9 +463,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# To fetch all papers with 10% sampling
-# python script.py -m all -f search_conditions.txt -p 10
-
-# To fetch random papers with a specific limit
-# python script.py -m random -f search_conditions.txt -n 1000
